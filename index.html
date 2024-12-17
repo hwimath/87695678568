@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>휘매쓰 연산 챌린지!</title>
+<style>
+    body {
+        font-family: Arial, sans-serif; 
+        background: #f9f9f9; 
+        margin:0; 
+        padding:0;
+    }
+    .container {
+        width: 600px; 
+        margin: 50px auto; 
+        background:#fff; 
+        padding:20px; 
+        border-radius:10px; 
+        box-shadow:0 0 10px rgba(0,0,0,0.1);
+    }
+    h1, h2, h3 {
+        text-align:center;
+    }
+    .hidden {display:none;}
+    .difficulty-select button {
+        margin:10px; 
+        padding:10px 20px; 
+        font-size:16px; 
+        border:none; 
+        border-radius:5px;
+        cursor:pointer;
+    }
+    .difficulty-select button:hover {
+        background:#eee;
+    }
+    .top-info {
+        display:flex; 
+        justify-content:space-between;
+        align-items:center; 
+        margin-bottom:10px;
+    }
+    .timer-bar {
+        background:#ccc; 
+        width:100%; 
+        height:20px; 
+        border-radius:10px; 
+        overflow:hidden; 
+        margin:5px 0;
+    }
+    .timer-fill {
+        background:green; 
+        height:100%; 
+        width:100%;
+        transition:width 0.5s linear;
+    }
+    .question-box {
+        text-align:center; 
+        margin:20px 0;
+        font-size: 24px;
+    }
+    .answers {
+        display:flex; 
+        flex-direction:column; 
+        align-items:center;
+    }
+    .answers button {
+        margin:5px; 
+        padding:10px; 
+        border:none; 
+        border-radius:5px; 
+        background:#eee; 
+        cursor:pointer; 
+        font-size:18px;
+    }
+    .answers button:hover {
+        background:#ddd;
+    }
+    .score-info {
+        text-align:center; 
+        margin-top:20px;
+        font-size: 20px;
+    }
+    .highlight {
+        color:red; 
+        font-weight:bold;
+    }
+</style>
+
+<!-- MathJax 로드 -->
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" defer></script>
+</head>
+<body>
+<div class="container">
+    <h1>휘매쓰 연산 챌린지!</h1>
+    <!-- 난이도 선택 화면 -->
+    <div id="difficulty-screen">
+        <h2>난이도를 선택하세요</h2>
+        <div class="difficulty-select">
+            <button onclick="startGame('top')">최상 (20초, 문제당 20점)</button>
+            <button onclick="startGame('high')">상 (30초, 문제당 15점)</button>
+            <button onclick="startGame('mid')">중 (40초, 문제당 13점)</button>
+            <button onclick="startGame('low')">하 (무제한, 문제당 10점)</button>
+        </div>
+    </div>
+
+    <!-- 게임 화면 -->
+    <div id="game-screen" class="hidden">
+        <div class="top-info">
+            <div>남은 기회: <span id="life"></span></div>
+            <div>전체 경과 시간: <span id="total-time">0</span>초</div>
+            <div>점수: <span id="score">0</span></div>
+        </div>
+        <div id="energy-bar-container" class="hidden">
+            <div class="timer-bar">
+                <div class="timer-fill" id="timer-fill"></div>
+            </div>
+        </div>
+
+        <div class="question-box">
+            <span id="question"></span>
+        </div>
+        <div class="answers" id="answers"></div>
+        <div class="score-info" id="message"></div>
+    </div>
+</div>
+
+<script>
+    let difficulty = null;
+    let timeLimit = 0;  // 각 문제별 제한시간
+    let scorePerQuestion = 0;
+    let life = 3;
+    let score = 0;
+    let totalElapsed = 0;
+    let timerInterval = null;
+    let totalTimerInterval = null;
+    let correctAnswer = null; // [integerPart, numerator, denominator] 형태
+
+    function startGame(diff) {
+        difficulty = diff;
+        switch(diff) {
+            case 'top':
+                timeLimit = 20;
+                scorePerQuestion = 20;
+                break;
+            case 'high':
+                timeLimit = 30;
+                scorePerQuestion = 15;
+                break;
+            case 'mid':
+                timeLimit = 40;
+                scorePerQuestion = 13;
+                break;
+            case 'low':
+                timeLimit = 0; // 무제한
+                scorePerQuestion = 10;
+                break;
+        }
+
+        document.getElementById('difficulty-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+        document.getElementById('life').textContent = life;
+
+        // 전체 게임 시간 타이머 시작
+        totalTimerInterval = setInterval(() => {
+            totalElapsed++;
+            document.getElementById('total-time').textContent = totalElapsed;
+        }, 1000);
+
+        nextProblem();
+    }
+
+    function nextProblem() {
+        document.getElementById('message').textContent = '';
+        if (timerInterval) clearInterval(timerInterval);
+
+        let success = generateProblem();
+        let retryCount = 0;
+        while(!success && retryCount < 10) {
+            success = generateProblem();
+            retryCount++;
+        }
+        if(!success) {
+            document.getElementById('message').textContent = "문제 생성 오류. 게임을 종료합니다.";
+            endGame();
+            return;
+        }
+
+        if (timeLimit > 0) {
+            document.getElementById('energy-bar-container').classList.remove('hidden');
+            startTimer();
+        } else {
+            document.getElementById('energy-bar-container').classList.add('hidden');
+        }
+        MathJax.typeset();
+    }
+
+    function startTimer() {
+        let remainingTime = timeLimit;
+        updateTimerBar(remainingTime);
+
+        timerInterval = setInterval(() => {
+            remainingTime--;
+            updateTimerBar(remainingTime);
+            if (remainingTime <= 0) {
+                clearInterval(timerInterval);
+                // 시간 초과
+                life--;
+                document.getElementById('life').textContent = life;
+                document.getElementById('message').innerHTML = "<span class='highlight'>시간 초과!</span> 다음문제로 넘어갑니다.";
+                if (life <= 0) {
+                    endGame();
+                } else {
+                    setTimeout(() => { nextProblem(); }, 2000);
+                }
+            }
+        }, 1000);
+    }
+
+    function updateTimerBar(remainingTime) {
+        const fill = document.getElementById('timer-fill');
+        let widthPercent = (timeLimit === 0) ? 100 : (remainingTime / timeLimit) * 100;
+        fill.style.width = widthPercent + '%';
+    }
+
+    function generateProblem() {
+        // 분모 설정
+        let d = Math.floor(Math.random()*8)+2; // 2~9
+        // 받아내림 없는 뺄셈: i1≥i2, n1≥n2
+        let [i1, n1, i2, n2] = generateNoBorrowFraction(d);
+        if(i1===null) return false;
+
+        // 뺄셈 수행: (i1 + n1/d) - (i2 + n2/d)
+        // = (i1 - i2) + (n1 - n2)/d
+        let diffInt = i1 - i2;
+        let diffNum = n1 - n2; // n1≥n2 이므로 음수X
+
+        correctAnswer = [diffInt, diffNum, d];
+
+        const questionEl = document.getElementById('question');
+        questionEl.innerHTML = `\\(${mixedFractionToLatex(i1,n1,d)} - ${mixedFractionToLatex(i2,n2,d)} = ?\\)`;
+
+        // 보기(정답 + 오답)
+        let answers = [correctAnswer];
+        let attemptCount = 0;
+        while(answers.length < 4 && attemptCount < 100) {
+            attemptCount++;
+            let wrong = generateWrongAnswer(correctAnswer);
+            if(!arrayIncludesAnswer(answers, wrong)) {
+                answers.push(wrong);
+            }
+        }
+
+        if (answers.length < 4) {
+            return false;
+        }
+
+        shuffle(answers);
+        const answersEl = document.getElementById('answers');
+        answersEl.innerHTML = '';
+        answers.forEach(ans => {
+            let btn = document.createElement('button');
+            btn.innerHTML = `\\(${mixedFractionToLatex(ans[0], ans[1], ans[2])}\\)`;
+            btn.onclick = () => checkAnswer(ans);
+            answersEl.appendChild(btn);
+        });
+        return true;
+    }
+
+    function generateNoBorrowFraction(d) {
+        // i1,i2: 정수부 (0~5정도 넓게)
+        // n1,n2: 분자 (1~d-1)
+        // 조건: i1>i2 이면 n1,n2 자유롭게 뽑아도 되지만 
+        //       i1=i2 이면 n1≥n2
+        // 우선 i1≥i2로 뽑는다.
+        let i1 = Math.floor(Math.random()*6); //0~5
+        let i2 = Math.floor(Math.random()*(i1+1)); // 0~i1 중에서 선택하면 i2 ≤ i1 확정
+        let n1 = Math.floor(Math.random()*(d-1))+1; 
+        let n2 = Math.floor(Math.random()*(d-1))+1;
+
+        if(i1===i2) {
+            // i1=i2이면 n1≥n2
+            if(n2>n1) {
+                // swap or re-choose n2
+                // 간단히 n2<=n1이 되도록 n2를 다시 뽑는다(최대 5번 시도)
+                let attempts=0;
+                while(n2>n1 && attempts<5) {
+                    n2 = Math.floor(Math.random()*(d-1))+1;
+                    attempts++;
+                }
+                if(n2>n1) {
+                    // 실패 시 다시
+                    return [null,null,null,null];
+                }
+            }
+        } else {
+            // i1 > i2 일 수도 있는데 이 경우는 n1,n2 자유
+            // 단 diff는 음수가 되지 않으려면 (i1 > i2)면 어떤 n1,n2여도 상관 없음 
+            // 그래도 혹시 i1>i2가 아닌 경우 위에서 처리함.
+        }
+
+        // 마지막으로 (i1 + n1/d) - (i2+n2/d) 음수가 아닌지 한번 더 체크
+        // i1 - i2 >= 0 (이미만족) and n1-n2≥0 if i1=i2
+        // i1>i2이면 n1<n2라도 diff 정수부에서 커버되므로 문제없음.
+        // 실제로 i1>i2이면 n1<n2여도 diff는 양수이거나 0보다 클 것.
+        // 예: 3과2/9 - 1과8/9 = (3-1) + (2-8)/9 = 2 + (-6/9) = 1 + 3/9 (받아내림 생기는거 아닌가?)
+        // 여기서 주의: 받아내림 없는 뺄셈이라면 n1<n2일 때 정수부 빌려오는 상황 발생.
+        // 따라서 i1>i2여도 n1≥n2 조건을 만족해야 완전히 "받아내림 없음"
+        // 즉, i1≥i2 and n1≥n2 항상 만족시켜야 한다.
+        if(n1<n2) return [null,null,null,null]; // 다시 생성
+
+        return [i1,n1,i2,n2];
+    }
+
+    function mixedFractionToLatex(i, n, d) {
+        if(n === 0) {
+            // 정수만 있을 경우
+            return `${i}`;
+        } else if(i === 0) {
+            // 정수부 없이 분수만
+            return `\\dfrac{${n}}{${d}}`;
+        } else {
+            return `${i}\\dfrac{${n}}{${d}}`;
+        }
+    }
+
+    function checkAnswer(userAns) {
+        if (timerInterval) clearInterval(timerInterval);
+        let correct = (userAns[0] === correctAnswer[0] && 
+                       userAns[1] === correctAnswer[1] && 
+                       userAns[2] === correctAnswer[2]);
+
+        if (correct) {
+            score += scorePerQuestion;
+            document.getElementById('score').textContent = score;
+            document.getElementById('message').textContent = "정답!";
+        } else {
+            life--;
+            document.getElementById('life').textContent = life;
+            document.getElementById('message').innerHTML = 
+                "<span class='highlight'>오답!</span> 정답: \\(" + mixedFractionToLatex(correctAnswer[0], correctAnswer[1], correctAnswer[2]) + "\\)";
+        }
+
+        MathJax.typeset();
+
+        if (life <= 0) {
+            endGame();
+        } else {
+            setTimeout(() => { nextProblem(); }, 2000);
+        }
+    }
+
+    function endGame() {
+        clearInterval(totalTimerInterval);
+        if (timerInterval) clearInterval(timerInterval);
+        document.getElementById('message').innerHTML += "<br>게임 종료! 최종 점수: " + score;
+    }
+
+    function generateWrongAnswer(correct) {
+        // 분모는 동일 유지
+        let [ti, tn, td] = correct;
+        // 받아내림 없는 뺄셈이므로 오답도 비슷한 범위에서 생성
+        // 정수부나 분자만 조금 조정
+        let wrongTi = ti;
+        let wrongTn = tn;
+
+        // 오답 생성 시 i와 n 조정. n이 td보다 크지 않게 하고 n≥0
+        let choice = Math.floor(Math.random()*2);
+        if(choice===0) {
+            // 정수부 변형
+            wrongTi = ti + (Math.random()<0.5?1:-1);
+            if(wrongTi<0) wrongTi=0;
+        } else {
+            // 분자 변형
+            let diff = (Math.random()<0.5)?1:-1;
+            wrongTn = tn + diff;
+            if(wrongTn<0) wrongTn=0;
+            if(wrongTn>=td) wrongTn = td-1;
+        }
+
+        // 받아내림 없는 조건은 오답에 반드시 적용할 필요는 없지만,
+        // 문제에서 요구한 건 "문제"가 받아내림 없이 풀리는 형태이지
+        // 오답은 꼭 그럴 필요는 없음. (오답은 엉뚱해도 됨)
+        // 여기서는 오답도 대충 맞는 범위 내 유지.
+
+        return [wrongTi, wrongTn, td];
+    }
+
+    function arrayIncludesAnswer(arr, ans) {
+        for(let a of arr) {
+            if(a[0]===ans[0] && a[1]===ans[1] && a[2]===ans[2]) return true;
+        }
+        return false;
+    }
+
+    function shuffle(array) {
+        for (let i = array.length -1; i>0; i--) {
+            const j = Math.floor(Math.random()* (i+1));
+            [array[i], array[j]]=[array[j], array[i]];
+        }
+    }
+</script>
+</body>
+</html>
