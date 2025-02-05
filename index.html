@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>휘매쓰 연산 챌린지!</title>
+<title>받아내림이 없는 대분수의 뺄셈</title>
 <style>
     body {
         font-family: Arial, sans-serif; 
@@ -84,6 +84,19 @@
         color:red; 
         font-weight:bold;
     }
+    #name-screen input {
+        font-size:16px;
+        padding:5px;
+        margin:10px 0;
+    }
+    #response {
+        margin-top: 20px;
+        white-space: pre-wrap;
+        background: #f1f1f1;
+        padding: 10px;
+        border-radius: 5px;
+        min-height: 50px;
+    }
 </style>
 
 <!-- MathJax 로드 -->
@@ -91,9 +104,19 @@
 </head>
 <body>
 <div class="container">
-    <h1>휘매쓰 연산 챌린지!</h1>
+    <!-- 1. 게임 이름 변경 -->
+    <h1>받아내림이 없는 대분수의 뺄셈</h1>
+
+    <!-- (추가) 첫 화면: 이름 입력 화면 -->
+    <div id="name-screen">
+        <h2>이름을 입력하세요</h2>
+        <input type="text" id="player-name" placeholder="이름 입력" />
+        <br>
+        <button onclick="goToDifficulty()">다음</button>
+    </div>
+
     <!-- 난이도 선택 화면 -->
-    <div id="difficulty-screen">
+    <div id="difficulty-screen" class="hidden">
         <h2>난이도를 선택하세요</h2>
         <div class="difficulty-select">
             <button onclick="startGame('top')">최상 (20초, 문제당 20점)</button>
@@ -122,11 +145,15 @@
         <div class="answers" id="answers"></div>
         <div class="score-info" id="message"></div>
     </div>
+
+    <!-- 점수 전송 결과 표시 영역 -->
+    <div id="response"></div>
 </div>
 
 <script>
+    let playerName = "";      // 사용자 이름
     let difficulty = null;
-    let timeLimit = 0;  // 각 문제별 제한시간
+    let timeLimit = 0;        // 각 문제별 제한시간
     let scorePerQuestion = 0;
     let life = 3;
     let score = 0;
@@ -134,6 +161,19 @@
     let timerInterval = null;
     let totalTimerInterval = null;
     let correctAnswer = null; // [integerPart, numerator, denominator] 형태
+
+    // 첫 화면에서 이름 입력 후 넘어가기
+    function goToDifficulty() {
+        const nameInput = document.getElementById('player-name').value.trim();
+        if (!nameInput) {
+            alert("이름을 입력해주세요.");
+            return;
+        }
+        playerName = nameInput;
+        // 이름 화면 숨기고 난이도 선택 화면 보이기
+        document.getElementById('name-screen').classList.add('hidden');
+        document.getElementById('difficulty-screen').classList.remove('hidden');
+    }
 
     function startGame(diff) {
         difficulty = diff;
@@ -223,16 +263,15 @@
     }
 
     function generateProblem() {
-        // 분모 설정
-        let d = Math.floor(Math.random()*8)+2; // 2~9
+        // 분모 설정 (2~9)
+        let d = Math.floor(Math.random()*8)+2;
         // 받아내림 없는 뺄셈: i1≥i2, n1≥n2
         let [i1, n1, i2, n2] = generateNoBorrowFraction(d);
         if(i1===null) return false;
 
-        // 뺄셈 수행: (i1 + n1/d) - (i2 + n2/d)
-        // = (i1 - i2) + (n1 - n2)/d
+        // (i1 + n1/d) - (i2 + n2/d) 계산
         let diffInt = i1 - i2;
-        let diffNum = n1 - n2; // n1≥n2 이므로 음수X
+        let diffNum = n1 - n2; 
 
         correctAnswer = [diffInt, diffNum, d];
 
@@ -267,56 +306,39 @@
     }
 
     function generateNoBorrowFraction(d) {
-        // i1,i2: 정수부 (0~5정도 넓게)
-        // n1,n2: 분자 (1~d-1)
-        // 조건: i1>i2 이면 n1,n2 자유롭게 뽑아도 되지만 
-        //       i1=i2 이면 n1≥n2
-        // 우선 i1≥i2로 뽑는다.
-        let i1 = Math.floor(Math.random()*6); //0~5
-        let i2 = Math.floor(Math.random()*(i1+1)); // 0~i1 중에서 선택하면 i2 ≤ i1 확정
+        let i1 = Math.floor(Math.random()*6); 
+        let i2 = Math.floor(Math.random()*(i1+1)); 
         let n1 = Math.floor(Math.random()*(d-1))+1; 
         let n2 = Math.floor(Math.random()*(d-1))+1;
 
+        // i1 = i2 이면 n1≥n2
         if(i1===i2) {
-            // i1=i2이면 n1≥n2
             if(n2>n1) {
-                // swap or re-choose n2
-                // 간단히 n2<=n1이 되도록 n2를 다시 뽑는다(최대 5번 시도)
                 let attempts=0;
                 while(n2>n1 && attempts<5) {
                     n2 = Math.floor(Math.random()*(d-1))+1;
                     attempts++;
                 }
                 if(n2>n1) {
-                    // 실패 시 다시
                     return [null,null,null,null];
                 }
             }
-        } else {
-            // i1 > i2 일 수도 있는데 이 경우는 n1,n2 자유
-            // 단 diff는 음수가 되지 않으려면 (i1 > i2)면 어떤 n1,n2여도 상관 없음 
-            // 그래도 혹시 i1>i2가 아닌 경우 위에서 처리함.
+        } 
+        // i1>i2 인 경우에는 n1<n2 라면 실제 계산 시 정수부를 빌려오므로 받아내림 생김.
+        // 따라서 n1 >= n2 이어야 받아내림이 없음.
+        if(i1>i2 && n1<n2) {
+            return [null,null,null,null];
         }
-
-        // 마지막으로 (i1 + n1/d) - (i2+n2/d) 음수가 아닌지 한번 더 체크
-        // i1 - i2 >= 0 (이미만족) and n1-n2≥0 if i1=i2
-        // i1>i2이면 n1<n2라도 diff 정수부에서 커버되므로 문제없음.
-        // 실제로 i1>i2이면 n1<n2여도 diff는 양수이거나 0보다 클 것.
-        // 예: 3과2/9 - 1과8/9 = (3-1) + (2-8)/9 = 2 + (-6/9) = 1 + 3/9 (받아내림 생기는거 아닌가?)
-        // 여기서 주의: 받아내림 없는 뺄셈이라면 n1<n2일 때 정수부 빌려오는 상황 발생.
-        // 따라서 i1>i2여도 n1≥n2 조건을 만족해야 완전히 "받아내림 없음"
-        // 즉, i1≥i2 and n1≥n2 항상 만족시켜야 한다.
-        if(n1<n2) return [null,null,null,null]; // 다시 생성
 
         return [i1,n1,i2,n2];
     }
 
     function mixedFractionToLatex(i, n, d) {
         if(n === 0) {
-            // 정수만 있을 경우
+            // 정수만
             return `${i}`;
         } else if(i === 0) {
-            // 정수부 없이 분수만
+            // 정수부 없음
             return `\\dfrac{${n}}{${d}}`;
         } else {
             return `${i}\\dfrac{${n}}{${d}}`;
@@ -352,35 +374,70 @@
     function endGame() {
         clearInterval(totalTimerInterval);
         if (timerInterval) clearInterval(timerInterval);
-        document.getElementById('message').innerHTML += "<br>게임 종료! 최종 점수: " + score;
+        document.getElementById('message').innerHTML += "<br>게임 종료! 최종 점수: " + score +
+            "<br><button onclick='sendScore()'>점수 전송</button>";
+    }
+
+    // 점수 전송 함수 호출 래퍼
+    function sendScore() {
+        saveData("받아내림이 없는 대분수의 뺄셈", playerName, score, totalElapsed);
+    }
+
+    // 4. 서버 전송 함수 (비동기 처리 예시)
+    async function saveData(game, name, score, elapsedTime) {
+        const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+        const requestData = {
+            game,
+            name,
+            score: parseInt(score, 10),
+            elapsedTime: parseInt(elapsedTime, 10)
+        };
+
+        try {
+            const response = await fetch(FUNCTION_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            });
+
+            const responseData = await response.json();
+
+            if (response.ok) {
+                document.getElementById('response').innerText = 
+                    `성공: ${JSON.stringify(responseData, null, 2)}`;
+            } else {
+                document.getElementById('response').innerText = 
+                    `오류: ${JSON.stringify(responseData, null, 2)}`;
+            }
+        } catch (error) {
+            console.error('요청 실패:', error);
+            document.getElementById('response').innerText = 
+                `네트워크 오류: ${error.message}`;
+        }
     }
 
     function generateWrongAnswer(correct) {
-        // 분모는 동일 유지
+        // 분모는 동일
         let [ti, tn, td] = correct;
-        // 받아내림 없는 뺄셈이므로 오답도 비슷한 범위에서 생성
-        // 정수부나 분자만 조금 조정
         let wrongTi = ti;
         let wrongTn = tn;
 
-        // 오답 생성 시 i와 n 조정. n이 td보다 크지 않게 하고 n≥0
+        // 정수부나 분자에 ±1 정도 변화
         let choice = Math.floor(Math.random()*2);
         if(choice===0) {
             // 정수부 변형
-            wrongTi = ti + (Math.random()<0.5?1:-1);
-            if(wrongTi<0) wrongTi=0;
+            wrongTi = ti + (Math.random()<0.5 ? 1 : -1);
+            if(wrongTi < 0) wrongTi = 0;
         } else {
             // 분자 변형
-            let diff = (Math.random()<0.5)?1:-1;
+            let diff = (Math.random()<0.5) ? 1 : -1;
             wrongTn = tn + diff;
-            if(wrongTn<0) wrongTn=0;
-            if(wrongTn>=td) wrongTn = td-1;
+            if(wrongTn < 0) wrongTn = 0;
+            if(wrongTn >= td) wrongTn = td - 1;
         }
-
-        // 받아내림 없는 조건은 오답에 반드시 적용할 필요는 없지만,
-        // 문제에서 요구한 건 "문제"가 받아내림 없이 풀리는 형태이지
-        // 오답은 꼭 그럴 필요는 없음. (오답은 엉뚱해도 됨)
-        // 여기서는 오답도 대충 맞는 범위 내 유지.
 
         return [wrongTi, wrongTn, td];
     }
